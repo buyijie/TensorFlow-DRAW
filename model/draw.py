@@ -5,7 +5,6 @@ import time
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.models.rnn import rnn, rnn_cell
 from copy import deepcopy
 import logging
 import logging.config
@@ -78,13 +77,15 @@ class Qsampler():
 #------------------------------------------------------------------
 
 class Reader():
-    def __init__(self, x_dim, dec_dimi, **kwargs):
+    def __init__(self, x_dim, dec_dim, **kwargs):
         self.x_dim=x_dim
         self.dec_dim=dec_dim
         self.output_dim=2*x_dim
 
     def get_dim(self, name):
         if name=='input':
+            return self.dec_dim
+        elif name=='x_dim':
             return self.x_dim
         elif name=='output':
             return self.output_dim
@@ -135,7 +136,7 @@ class AttentionWriter():
 
 class DrawModel():
 #todo
-    def __init__(self, n_iter, reader, sampler, writer, x_dim, enc_dim, z_dim, dec_dim, config, **kwargs):
+    def __init__(self, reader, sampler, writer, config, **kwargs):
         """
         config should have the following hyper-parameters:
         batch_size
@@ -144,6 +145,7 @@ class DrawModel():
         n_iter
         enc_dim
         dec_dim
+        z_dim
         category_num (which is 10 for cifar-10)
 
         lr (learning rate)
