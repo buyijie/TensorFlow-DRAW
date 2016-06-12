@@ -23,9 +23,10 @@ def data_iterator(data_x, data_y, batch_size):
         y=data_y[i*batch_size:(i+1)*batch_size, :]
         yield(x, y)
 
-    x=data_x[batch_length*batch_size:, :]
-    y=data_y[batch_length*batch_size:, :]
-    yield(x, y)
+#todo! currently not use the left data
+#    x=data_x[batch_length*batch_size:, :]
+#    y=data_y[batch_length*batch_size:, :]
+#    yield(x, y)
 
 if __name__=="__main__":
     train_x, train_y=load_data("../dataset/cifar10/data_batch_1")

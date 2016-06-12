@@ -56,7 +56,7 @@ class Qsampler():
                 -0.5
                 , 1)
 
-        return z, kl
+        return z, tf.reshape(kl, [-1, 1])
 
     def sample_from_prior(self, u):
         """
@@ -114,11 +114,11 @@ class Writer():
         self.W=tf.Variable(tf.random_uniform([self.input_dim, self.output_dim]))        
         self.b=tf.Variable(tf.random_uniform([self.output_dim]))
 
-    def transform(h):
+    def transform(self, h):
        return tf.matmul(h, self.W)+self.b
 
     def apply(self, h):
-        return self.transorm(h)
+        return self.transform(h)
 
 class AttentionWriter():
 #todo
@@ -155,32 +155,35 @@ class DrawModel():
         self.reader=reader
         self.sampler=sampler
         self.writer=writer
-        self.enc_dim=enc_dim
-        self.dec_dim=dec_dim
-        self.read_dim=reader.get_dim('output')
-        self.z_dim=sampler.get_dim('output')
+        self.enc_dim=self.config.enc_dim
+        self.dec_dim=self.config.dec_dim
+        self.x_dim=self.config.image_size 
+        self.read_dim=self.reader.get_dim('output')
+        self.z_dim=self.sampler.get_dim('output')
         self.add_encoder_rnn_variable()
         self.add_decoder_rnn_variable()
-        self.add_softmax_layer_variable()
+        self.add_softmax_variable()
         self.build_model()
         self.add_train_op_reconstruct()
         self.add_train_op_classification()
         self.add_predict_op()
 
     def add_placeholder(self):
-        self.x=tf.placeholder(tf.float32, [self.config.batch_size, self.config_image_size])
-        self.y=tf.placeholder(tf.int64, [self.config.batch_size, 1])
+        self.x=tf.placeholder(tf.float32, [self.config.batch_size, self.config.image_size])
+        self.y=tf.placeholder(tf.int64, [self.config.batch_size])
 
     def add_encoder_rnn_variable(self):
-        self.lstm_cell_encoder=tf.nn.rnn_cell.BasicLSTMCell(self.encoder_dim, forget_bias=1.0)
-        self.initial_state_encoder=self.lstm_cell_encoder.zero_state(self.config.batch_size, tf.float32)
+        with tf.variable_scope('encoder') as scope:
+            self.encoder_lstm_cell=tf.nn.rnn_cell.BasicLSTMCell(self.enc_dim, forget_bias=1.0)
+            self.encoder_initial_state=self.encoder_lstm_cell.zero_state(self.config.batch_size, tf.float32)
 
     def add_decoder_rnn_variable(self):
-        self.lstm_cell_decoder=tf.nn.rnn_cell.BasicLSTMCell(self.decoder_dim, forget_bias=1.0)
-        self.initial_state_decoder=self.lstm_cell_decoder.zero_state(self.config.batch_size, tf.float32)
+        with tf.variable_scope('decoder') as scope:
+            self.decoder_lstm_cell=tf.nn.rnn_cell.BasicLSTMCell(self.dec_dim, forget_bias=1.0)
+            self.decoder_initial_state=self.decoder_lstm_cell.zero_state(self.config.batch_size, tf.float32)
 
     def add_softmax_variable(self):
-        self.W_softmax=tf.Variable(tf.random_uniform([self.encoder_dim+self.z_dim, self.config.category_num]))
+        self.W_softmax=tf.Variable(tf.random_uniform([self.config.n_iter*(self.enc_dim+self.z_dim), self.config.category_num]))
         self.b_softmax=tf.Variable(tf.random_uniform([self.config.category_num]))
 
     def build_model(self):
@@ -189,27 +192,32 @@ class DrawModel():
         """
         u=tf.random_normal([self.config.n_iter, self.config.batch_size, self.z_dim])
 
-        state_encoder=self.initial_state_encoder
-        state_decoder=self.initial_state_decoder
+        encoder_state=self.encoder_initial_state
+        decoder_state=self.decoder_initial_state
         x=self.x
-        c=tf.zeros([])
+        c=tf.zeros([self.config.batch_size, self.config.image_size])
         h_enc=tf.zeros([self.config.batch_size, self.enc_dim], tf.float32)
         h_dec=tf.zeros([self.config.batch_size, self.dec_dim], tf.float32)
         x_hat=x-tf.sigmoid(c)
-        c=tf.zeros([self.config.batch_size, self.x_dim])
+        c=tf.zeros([self.config.batch_size, self.config.image_size])
 
         hidden_enc_list=[]
         hidden_dec_list=[]
         z_list=[]
         kl_list=[]
 
-        for i in xrange(self.n_iter):
+        for i in xrange(self.config.n_iter):
+            print 'building glimpse {}'.format(i) 
             r=self.reader.apply(x, x_hat, h_dec)
-            h_enc, state_encoder=self.lstm_cell_encoder(tf.concat(1, [r, h_dec]), state_encoder)
+            with tf.variable_scope('encoder') as scope:
+                if i>0: scope.reuse_variables()
+                h_enc, encoder_state=self.encoder_lstm_cell(tf.concat(1, [r, h_dec]), encoder_state)
             z, kl=self.sampler.sample(h_enc, u[i, :, :])
-            h_dec, state_decoder=self.lstm_cell_decoder(z, state_decoder)
+            with tf.variable_scope('decoder') as scope:
+                if i>0: scope.reuse_variables()
+                h_dec, decoder_state=self.decoder_lstm_cell(z, decoder_state)
             c=c+self.writer.apply(h_dec)
-
+            x_hat=x-tf.sigmoid(c)
             hidden_enc_list.append(h_enc)
             hidden_dec_list.append(h_dec)
             z_list.append(z)
@@ -217,7 +225,7 @@ class DrawModel():
 
         #add reconstruct loss
         x_reconstruct=tf.sigmoid(c)
-        loss_reconstruct=tf.reduce_mean(-tf.reduce_sum(self.x*tf.log(c)+(1-self.x)*(1-tf.log(c)), 1))
+        loss_reconstruct=tf.reduce_mean(-tf.reduce_sum(self.x*tf.log(c)+(1-self.x)*(tf.log(1-c)), 1))
         kl_all=tf.concat(1, kl_list)
         loss_kl=tf.reduce_mean(kl_all)
         self.loss_reconstruct=loss_kl+loss_reconstruct
@@ -225,9 +233,9 @@ class DrawModel():
         #add classification loss
         softmax_feature_hidden_state=tf.concat(1, hidden_enc_list)
         softmax_feature_z_state=tf.concat(1, z_list)
-        softmax_feature=tf.concat(1, [softmax_featrue_hidden_state, softmax_feature_z_state])
+        softmax_feature=tf.concat(1, [softmax_feature_hidden_state, softmax_feature_z_state])
         self.logits=tf.matmul(softmax_feature, self.W_softmax)+self.b_softmax
-        self.loss_classification=tf.nn.sparse_softmax_cross_entropy_with_logits(self.logits, self.y)
+        self.loss_classification=tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(self.logits, self.y))
 
     def add_train_op_reconstruct(self):
         self.train_op_reconstruct=tf.train.AdamOptimizer(self.config.lr).minimize(self.loss_reconstruct)
@@ -237,7 +245,7 @@ class DrawModel():
 
     def add_predict_op(self):
         _probability=tf.nn.softmax(self.logits)
-        tf.predict=tf.argmax(_probability, 1)
+        self.predict=tf.argmax(_probability, 1)
 
 if __name__=='__main__':
 #unit test
