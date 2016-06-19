@@ -8,6 +8,7 @@ import tensorflow as tf
 from copy import deepcopy
 import logging
 import logging.config
+from attention import ZoomableAttentionWindow
 
 #------------------------------------------------------------------
 class Qsampler():
@@ -18,7 +19,7 @@ class Qsampler():
         self.prior_log_sigma=0.
         self.input_dim=input_dim
         self.output_dim=output_dim
-        self.W_mean=tf.Variable(tf.random_uniform([input_dim, output_dim])) 
+        self.W_mean=tf.Variable(tf.random_uniform([input_dim, output_dim]))
         self.b_mean=tf.Variable(tf.random_uniform([output_dim]))
         self.W_log=tf.Variable(tf.random_uniform([input_dim, output_dim]))
         self.b_log=tf.Variable(tf.random_uniform([output_dim]))
@@ -37,7 +38,7 @@ class Qsampler():
         Parameters
         --------------
         x:
-        
+
         Returns
         --------------
         z: samples drawn from Q(z|x)
@@ -61,7 +62,7 @@ class Qsampler():
     def sample_from_prior(self, u):
         """
         Sample z from the prior distribution P_z.
-        
+
         Parameters
         ----------
         u: gaussian random source
@@ -93,17 +94,39 @@ class Reader():
             raise ValueError
 
     def apply(self, x, x_hat, h_dec):
-        return tf.concat(1, [x, x_hat]) 
+        return tf.concat(1, [x, x_hat])
 
 class AttentionReader():
-#todo
-    def __init__(self, x_dim, dec_dim, channels, height, width, N, **kwargs):
+    def __init__(self, x_dim, dec_dim, channels, height, width, N, batch_size):
         self.img_height=height
         self.img_width=width
         self.N=N
         self.x_dim=x_dim
         self.dec_dim=dec_dim
         self.output_dim=2*channels*N*N
+        self.batch_size=batch_size
+
+        self.zoomer=ZoomableAttentionWindow(channels, height, width, N, batch_size)
+        self.W=tf.Variable(tf.random_uniform([dec_dim, 5]))
+        self.b=tf.Variable(tf.random_uniform([5]))
+
+    def get_dim(self, name):
+        if name=='input':
+            return self.dec_dim
+        elif name=='x_dim':
+            return self.x_dim
+        elif name=='output':
+            return self.output_dim
+        else:
+            raise ValueError
+
+    def apply(self, x, x_hat, h_dec):
+        l=tf.matmul(h_dec, self.W)+self.b
+        center_y, center_x, delta, sigma, gamma=self.zoomer.nn2att(l)
+        w=gamma*self.zoomer.read(x, center_y, center_x, delta, sigma)
+        w_hat=gamma*self.zoomer.read(x_hat, center_y, center_x, delta, sigma)
+        return tf.concat(1, [w, w_hat])
+
 
 #-----------------------------------------------------------------
 
@@ -111,7 +134,7 @@ class Writer():
     def __init__(self, input_dim, output_dim, **kwargs):
         self.input_dim=input_dim
         self.output_dim=output_dim
-        self.W=tf.Variable(tf.random_uniform([self.input_dim, self.output_dim]))        
+        self.W=tf.Variable(tf.random_uniform([self.input_dim, self.output_dim]))
         self.b=tf.Variable(tf.random_uniform([self.output_dim]))
 
     def transform(self, h):
@@ -121,16 +144,31 @@ class Writer():
         return self.transform(h)
 
 class AttentionWriter():
-#todo
-    def __init__(self, input_dim, output_dim, channels, width, height, N, **kwargs):
+    def __init__(self, input_dim, output_dim, channels, width, height, N, batch_size):
         self.channels=channels
         self.img_width=width
         self.img_height=height
         self.N=N
         self.input_dim=input_dim
         self.output_dim=output_dim
+        self.batch_size=batch_size
 
         assert output_dim==channels*width*height
+
+        self.zoomer=ZoomableAttentionWindow(channels, height, width, N, batch_size)
+        self.W_z=tf.Variable(tf.random_uniform([input_dim, 5]))
+        self.b_z=tf.Variable(tf.random_uniform([5]))
+        self.W_w=tf.Variable(tf.random_uniform([input_dim, channels*N*N]))
+        self.b_w=tf.Variable(tf.random_uniform([channels*N*N]))
+
+    def apply(self, h):
+        w=tf.matmul(h, self.W_w)+self.b_w
+        l=tf.matmul(h, self.W_z)+self.b_z
+
+        center_y, center_x, delta, sigma, gamma=self.zoomer.nn2att(l)
+        c_update=1./gamma*self.zoomer.write(w, center_y, center_x, delta, sigma)
+
+        return c_update
 
 #-----------------------------------------------------------------
 
@@ -157,7 +195,7 @@ class DrawModel():
         self.writer=writer
         self.enc_dim=self.config.enc_dim
         self.dec_dim=self.config.dec_dim
-        self.x_dim=self.config.image_size 
+        self.x_dim=self.config.image_size
         self.read_dim=self.reader.get_dim('output')
         self.z_dim=self.sampler.get_dim('output')
         self.add_encoder_rnn_variable()
@@ -188,7 +226,7 @@ class DrawModel():
 
     def build_model(self):
         """
-        generate n_iter steps  
+        generate n_iter steps
         """
         u=tf.random_normal([self.config.n_iter, self.config.batch_size, self.z_dim])
 
@@ -207,7 +245,7 @@ class DrawModel():
         kl_list=[]
 
         for i in xrange(self.config.n_iter):
-            print 'building glimpse {}'.format(i) 
+            print 'building glimpse {}'.format(i)
             r=self.reader.apply(x, x_hat, h_dec)
             with tf.variable_scope('encoder') as scope:
                 if i>0: scope.reuse_variables()
@@ -249,7 +287,11 @@ class DrawModel():
 
 if __name__=='__main__':
 #unit test
-    q=Qsampler(1,2) 
+    ar=AttentionReader(3*32*32, 256, 3, 32, 32, 5)
+    print ("AttentionReader build completed!!!")
+    aw=AttentionWriter(256, 3*32*32, 3, 32, 32, 5)
+    print ("AttentionWriter build completed!!!")
+    q=Qsampler(1,2)
     q.get_dim('input')
     z,kl=q.sample(tf.constant([[1.]]),tf.constant([[1.,1.]]))
     z=q.sample_from_prior(tf.constant([[1.]]))
