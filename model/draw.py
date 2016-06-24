@@ -237,7 +237,6 @@ class DrawModel():
         h_enc=tf.zeros([self.config.batch_size, self.enc_dim], tf.float32)
         h_dec=tf.zeros([self.config.batch_size, self.dec_dim], tf.float32)
         x_hat=x-tf.sigmoid(c)
-        c=tf.zeros([self.config.batch_size, self.config.image_size])
 
         hidden_enc_list=[]
         hidden_dec_list=[]
@@ -262,7 +261,7 @@ class DrawModel():
             kl_list.append(kl)
 
         #add reconstruct loss
-        x_reconstruct=tf.sigmoid(c)
+        c=tf.sigmoid(c)
         loss_reconstruct=tf.reduce_mean(-tf.reduce_sum(self.x*tf.log(c)+(1-self.x)*(tf.log(1-c)), 1))
         kl_all=tf.concat(1, kl_list)
         loss_kl=tf.reduce_mean(kl_all)

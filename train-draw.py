@@ -12,7 +12,7 @@ logging.addLevelName(logging.WARNING, "\033[1;34m[%s]\033[1;0m" % logging.getLev
 logging.addLevelName(logging.ERROR, "\033[1;41m[%s]\033[1;0m" % logging.getLevelName(logging.ERROR))
 
 class Config():
-    batch_size=64
+    batch_size=10
     image_size=3*32*32
     image_height=32
     image_width=32
@@ -23,12 +23,14 @@ class Config():
     z_dim=10
     category_num=10
     lr=0.01
-    max_epoch=10
+    max_epoch=1000
     N=10
 
 if __name__=='__main__':
     train_x, train_y=load_data('dataset/cifar10/data_batch_1')
     train_x=train_x/255.
+    train_x=train_x[:10, :]
+    train_y=train_y[:10, :]
 #    for i in xrange(4):
 #        _x, _y=load_data('dataset/cifar10/data_batch_'+str(2+i))
 #        _x=_x/255.
