@@ -262,20 +262,20 @@ class DrawModel():
 
         #add reconstruct loss
         c=tf.sigmoid(c)
-        loss_reconstruct=tf.reduce_mean(-tf.reduce_sum(self.x*tf.log(c)+(1-self.x)*(tf.log(1-c)), 1))
+        loss_reconstruct=tf.reduce_mean(-tf.reduce_sum(self.x*tf.log(c+0.00001)+(1-self.x)*(tf.log(1-c+0.00001)), 1))
         kl_all=tf.concat(1, kl_list)
         loss_kl=tf.reduce_mean(kl_all)
         self.loss_reconstruct=loss_kl+loss_reconstruct
 
-        self._tmp_loss=loss_reconstruct
-        self._tmp_loss_kl=loss_kl
+        self._loss_reconstruct=loss_reconstruct
+        self._loss_kl=loss_kl
 
         #add classification loss
         softmax_feature_hidden_state=tf.concat(1, hidden_enc_list)
         softmax_feature_z_state=tf.concat(1, z_list)
         softmax_feature=tf.concat(1, [softmax_feature_hidden_state, softmax_feature_z_state])
         self.logits=tf.matmul(softmax_feature, self.W_softmax)+self.b_softmax
-        self.loss_classification=tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(self.logits, self.y))
+        self.loss_classification=tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(self.logits, self.y))
 
     def add_train_op_reconstruct(self):
         self.train_op_reconstruct=tf.train.AdamOptimizer(self.config.lr).minimize(self.loss_reconstruct)

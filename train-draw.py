@@ -12,25 +12,25 @@ logging.addLevelName(logging.WARNING, "\033[1;34m[%s]\033[1;0m" % logging.getLev
 logging.addLevelName(logging.ERROR, "\033[1;41m[%s]\033[1;0m" % logging.getLevelName(logging.ERROR))
 
 class Config():
-    batch_size=10
+    batch_size=50
     image_size=3*32*32
     image_height=32
     image_width=32
     channel=3
     n_iter=10
-    enc_dim=64
-    dec_dim=64
-    z_dim=10
+    enc_dim=128
+    dec_dim=128
+    z_dim=50
     category_num=10
     lr=0.01
-    max_epoch=1000
+    max_epoch=2000
     N=10
 
 if __name__=='__main__':
     train_x, train_y=load_data('dataset/cifar10/data_batch_1')
     train_x=train_x/255.
-    train_x=train_x[:10, :]
-    train_y=train_y[:10, :]
+    train_x=train_x[:50, :]
+    train_y=train_y[:50, :]
 #    for i in xrange(4):
 #        _x, _y=load_data('dataset/cifar10/data_batch_'+str(2+i))
 #        _x=_x/255.
@@ -73,13 +73,14 @@ if __name__=='__main__':
         logging.info('Epoch {}'.format(_epoch))
         for _step, (_x, _y) in enumerate(data_iterator(train_x, train_y, config.batch_size)):
             logging.info('  step {}'.format(_step))
-            _tmp_loss, _tmp_loss_kl, loss_reconstruct, loss_classification, _=session.run([core._tmp_loss, core._tmp_loss_kl, core.loss_reconstruct, core.loss_classification, core.train_op_reconstruct], feed_dict={core.x: _x, core.y: _y.reshape([-1])})
+            _tmp_loss, _tmp_loss_kl, loss_reconstruct, loss_classification, _=session.run([core._loss_reconstruct, core._loss_kl, core.loss_reconstruct, core.loss_classification, core.train_op_classification], feed_dict={core.x: _x, core.y: _y.reshape([-1])})
             logging.info('  loss_reconstruct: {}, loss_classification: {}'.format(loss_reconstruct, loss_classification))
             monitor[_epoch]+=loss_classification
             print _tmp_loss, _tmp_loss_kl
 #        save_path=saver.save(session, './tmp/model_'+str(_epoch)+'.ckpt')
 #        logging.info('Model saved in file: {}'.format(save_path))
-        logging.info('Total classification loss is: {}'.format(monitor[_epoch]))
+        monitor[_epoch]/=(train_x.shape[0]/config.batch_size)
+        logging.info('Total classsification loss is: {}'.format(monitor[_epoch]))
 
     logging.info('Train Complete!!!')
 
