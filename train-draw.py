@@ -73,9 +73,10 @@ if __name__=='__main__':
         logging.info('Epoch {}'.format(_epoch))
         for _step, (_x, _y) in enumerate(data_iterator(train_x, train_y, config.batch_size)):
             logging.info('  step {}'.format(_step))
-            loss_reconstruct, loss_classification, _=session.run([core.loss_reconstruct, core.loss_classification, core.train_op_classification], feed_dict={core.x: _x, core.y: _y.reshape([-1])})
+            _tmp_loss, _tmp_loss_kl, loss_reconstruct, loss_classification, _=session.run([core._tmp_loss, core._tmp_loss_kl, core.loss_reconstruct, core.loss_classification, core.train_op_reconstruct], feed_dict={core.x: _x, core.y: _y.reshape([-1])})
             logging.info('  loss_reconstruct: {}, loss_classification: {}'.format(loss_reconstruct, loss_classification))
             monitor[_epoch]+=loss_classification
+            print _tmp_loss, _tmp_loss_kl
 #        save_path=saver.save(session, './tmp/model_'+str(_epoch)+'.ckpt')
 #        logging.info('Model saved in file: {}'.format(save_path))
         logging.info('Total classification loss is: {}'.format(monitor[_epoch]))

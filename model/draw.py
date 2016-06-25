@@ -19,10 +19,10 @@ class Qsampler():
         self.prior_log_sigma=0.
         self.input_dim=input_dim
         self.output_dim=output_dim
-        self.W_mean=tf.Variable(tf.random_uniform([input_dim, output_dim]))
-        self.b_mean=tf.Variable(tf.random_uniform([output_dim]))
-        self.W_log=tf.Variable(tf.random_uniform([input_dim, output_dim]))
-        self.b_log=tf.Variable(tf.random_uniform([output_dim]))
+        self.W_mean=tf.Variable(tf.zeros([input_dim, output_dim]))
+        self.b_mean=tf.Variable(tf.zeros([output_dim]))
+        self.W_log=tf.Variable(tf.zeros([input_dim, output_dim]))
+        self.b_log=tf.Variable(tf.zeros([output_dim]))
 
     def get_dim(self, name):
         if name=='input':
@@ -107,8 +107,8 @@ class AttentionReader():
         self.batch_size=batch_size
 
         self.zoomer=ZoomableAttentionWindow(channels, height, width, N, batch_size)
-        self.W=tf.Variable(tf.random_uniform([dec_dim, 5]))
-        self.b=tf.Variable(tf.random_uniform([5]))
+        self.W=tf.Variable(tf.zeros([dec_dim, 5]))
+        self.b=tf.Variable(tf.zeros([5]))
 
     def get_dim(self, name):
         if name=='input':
@@ -134,8 +134,8 @@ class Writer():
     def __init__(self, input_dim, output_dim, **kwargs):
         self.input_dim=input_dim
         self.output_dim=output_dim
-        self.W=tf.Variable(tf.random_uniform([self.input_dim, self.output_dim]))
-        self.b=tf.Variable(tf.random_uniform([self.output_dim]))
+        self.W=tf.Variable(tf.zeros([self.input_dim, self.output_dim]))
+        self.b=tf.Variable(tf.zeros([self.output_dim]))
 
     def transform(self, h):
        return tf.matmul(h, self.W)+self.b
@@ -156,10 +156,10 @@ class AttentionWriter():
         assert output_dim==channels*width*height
 
         self.zoomer=ZoomableAttentionWindow(channels, height, width, N, batch_size)
-        self.W_z=tf.Variable(tf.random_uniform([input_dim, 5]))
-        self.b_z=tf.Variable(tf.random_uniform([5]))
-        self.W_w=tf.Variable(tf.random_uniform([input_dim, channels*N*N]))
-        self.b_w=tf.Variable(tf.random_uniform([channels*N*N]))
+        self.W_z=tf.Variable(tf.zeros([input_dim, 5]))
+        self.b_z=tf.Variable(tf.zeros([5]))
+        self.W_w=tf.Variable(tf.zeros([input_dim, channels*N*N]))
+        self.b_w=tf.Variable(tf.zeros([channels*N*N]))
 
     def apply(self, h):
         w=tf.matmul(h, self.W_w)+self.b_w
@@ -221,8 +221,8 @@ class DrawModel():
             self.decoder_initial_state=self.decoder_lstm_cell.zero_state(self.config.batch_size, tf.float32)
 
     def add_softmax_variable(self):
-        self.W_softmax=tf.Variable(tf.random_uniform([self.config.n_iter*(self.enc_dim+self.z_dim), self.config.category_num]))
-        self.b_softmax=tf.Variable(tf.random_uniform([self.config.category_num]))
+        self.W_softmax=tf.Variable(tf.zeros([self.config.n_iter*(self.enc_dim+self.z_dim), self.config.category_num]))
+        self.b_softmax=tf.Variable(tf.zeros([self.config.category_num]))
 
     def build_model(self):
         """
@@ -266,6 +266,9 @@ class DrawModel():
         kl_all=tf.concat(1, kl_list)
         loss_kl=tf.reduce_mean(kl_all)
         self.loss_reconstruct=loss_kl+loss_reconstruct
+
+        self._tmp_loss=loss_reconstruct
+        self._tmp_loss_kl=loss_kl
 
         #add classification loss
         softmax_feature_hidden_state=tf.concat(1, hidden_enc_list)
