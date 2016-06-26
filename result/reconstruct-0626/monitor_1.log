@@ -1,0 +1,10 @@
+loss_reconstruct_with_kl
+2129.70848145 2683.99732422 
+loss_reconstruct
+2128.67142456 2126.68272339 
+loss_classification
+2.30258536339 2.30258536339 
+loss_kl
+1.03706392698 557.314589863 
+classification_precision
+0.0 0.0 
